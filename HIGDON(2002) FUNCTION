@@ -1,0 +1,54 @@
+#迭帶次數
+nIter <- 10
+results <- vector("list",nIter)
+bestHist <- matrix(0,nIter+1,d + 1)
+colnames(bestHist) <- c(sprintf("x%d",1:d),"y")
+bestHist[1,] <- c(train_x[bestloc,],train_y[bestloc])
+
+
+for(i in 1:nIter){
+  out <- seqOptim(design=train_x,response=train_y,candidates=x_grid)
+  results[[i]]<-out
+  #EI最大的點x
+  new_x<-out$new_x
+  new_y<-fun(new_x)
+
+  #將新的點加入資料
+  train_x <-rbind(train_x,new_x)
+  train_y<-c(train_y,new_y)
+  bestloc<-which.min(train_y)
+  bestHist[i+1,]<-c(train_x[bestloc,],train_y[bestloc])
+}
+
+#畫圖
+lay <- layout(rbind(matrix(1:4,2, 2), matrix(5:8,2,2)))
+
+for(i in 1:nIter){
+  pred_y <- predict(results[[i]]$model, data.frame(x=x_grid),type="UK")
+  EI_values <- results[[i]]$EI_values
+  curr_x <- results[[i]]$design
+  curr_y <- results[[i]]$response
+  bestloc <- which.min(curr_y)
+  mloc <- which.max(EI_values)
+  par(mar= c(.1,4,4,2))
+  plot(x_grid,y_grid,type="l", col="blue",lwd=2,
+  xlab="x",ylab="f(x)",main=sprintf("Iteration%d",i))
+  points(optimSol$x,optimSol$y,pch =17,col="darkorange3")
+
+  points(x_grid,pred_y$mean,type = "l",col="#666666",lwd=2)
+  points(curr_x$x,curr_y,pch=15, cex=1.2,col="#666666")
+  points(curr_x$x[bestloc],curr_y[bestloc],pch=16,cex=0.5,col="gold1")
+
+  legend("topright", c("f(x)","GP","Design","Optim"),bty="n",
+  pch= c(NA,NA,15,17),col= c("blue","#666666","#666666","darkorange3"),
+  lty= c(1,1,NA,NA),lwd=c(1,1,NA,NA), cex = 0.75)
+
+  par(mar= c(5,4,.1,2))
+  plot(x_grid,EI_values,type ="l",col="black",
+  xlab="x",ylab="EI")
+  points(x_grid[mloc],EI_values[mloc],pch=16,col="red")
+  arrows(x_grid[mloc],EI_values[mloc],x_grid[mloc],0,code=0,col="red")
+  text(x_grid[mloc],0,"new",col="red")
+  par(mar= c(5,4,4,2) + .1)
+}
+
