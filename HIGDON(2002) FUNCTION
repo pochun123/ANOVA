@@ -1,3 +1,111 @@
+library(DiceOptim)
+library(lhs)
+
+#直接用單點找最小值
+a <- seq(0, 10, by = 0.0000001)
+fun <- function(s){
+  sin(2*pi*s/10)+0.2*sin(2*pi*s/2.5)
+}
+w <- fun(a)
+mina <- a[which(w == min(w))]
+
+
+#畫出函數圖形並標記出最小值
+optimSol <- list(x = mina, y = fun(mina))
+x_grid <- as.matrix(seq(0, 10, length = 20000))
+y_grid <- apply(x_grid, 1, fun)
+
+plot(x_grid, y_grid, type = "l", col = "darkblue", lwd = 2,
+xlab = "x", ylab = "f(x)")
+points(optimSol$x, optimSol$y, pch = 17, col = 2)
+
+legend("topright", c("f(x)", "Optim"), bty = "n",
+pch = c(NA, 17), col = c("darkblue", 2),lty = c(1, NA), lwd = c(2, NA))
+
+
+#最初的樣本點
+n <- 5
+#函數維度
+d <- 1 
+set.seed(1)
+
+#利用拉丁方格設計決定初始樣本(範圍為(0,10))
+X <- lhs::optimumLHS(n,d)*10
+train_y <- as.matrix(apply(X, 1, fun))
+train_x <- data.frame(x=X)
+
+#配適DACE模型(Gaussian process)
+fit <- km(design=train_x,response =train_y,covtype="gauss", nugget.estim=TRUE)
+
+pred_y <- predict(fit, data.frame(x=x_grid),type="UK")
+
+#目前的最佳解(最小值)
+bestloc<-which.min(train_y)
+
+
+#畫出DACE模型與真正的函數比較並標出目前的最小值
+plot(x_grid,y_grid,type="l",col="darkblue",lwd=2,xlab="x",ylab="f(x)")
+
+points(optimSol$x,optimSol$y,pch = 17,col="darkorange3")
+points(x_grid,pred_y$mean,type= "l",col="grey30",lwd=2)
+points(train_x$x,train_y,pch=15,cex=1.2,col="grey30")
+points(train_x$x[bestloc],train_y[bestloc],pch=16,cex=1,col="gold")
+
+legend("topright", c("f(x)","GP","Init.Design","Optim"),bty="n",
+pch=c(NA,NA,15,17),col= c("darkblue","grey30","grey30",     "darkorange3"),lty=c(1,1,NA,NA),lwd=c(2,2,NA,NA))
+
+
+#計算EI
+EI_values <- apply(x_grid,1,EI,fit,type="UK")
+mloc <- which.max(EI_values)
+
+#畫出函數中各點的EI
+par(mfrow=c(2,1))
+par(mar= c(.1,4,4,2))
+plot(x_grid,y_grid,type="l",col="darkblue",lwd=2,
+xlab="x",ylab="f(x)")
+points(optimSol$x,optimSol$y,pch = 17,col="darkorange3")
+points(x_grid,pred_y$mean,type= "l",col="grey30",lwd=2)
+points(train_x$x,train_y,pch=15,cex=1.2,col="grey30")
+points(train_x$x[bestloc],train_y[bestloc],pch=16,cex=0.5,col="gold")
+
+legend("topright", c("f(x)","GP","Init.Design","Optim"),bty="n",
+pch=c(NA,NA,15,17),col= c("darkblue","grey30","grey30","darkorange3"),
+lty=c(1,1,NA,NA),lwd=c(2,2,NA,NA))
+
+par(mar= c(5,4,.1,2))
+plot(x_grid,EI_values,type="l",col="black",
+xlab="x",ylab="EI")
+points(x_grid[mloc],EI_values[mloc],pch=16,col="red")
+
+arrows(x_grid[mloc],EI_values[mloc],x_grid[mloc],0,code=0,col="red")
+text(x_grid[mloc],0,"new",col="red")
+
+
+
+#迭代
+seqOptim <- function(design,response,candidates){
+  model <- km(design=design,response=response,covtype="gauss",
+  nugget.estim=TRUE)
+  EI_values <- apply(candidates,1,EI,model,type="SK")
+  mloc <- which.max(EI_values)
+  return(list(design=design,response=response,
+  model = model, EI_values = EI_values,
+  new_x = candidates[mloc]))
+}
+
+
+
+n <- 5 
+d <- 1 
+set.seed(1)
+init_X <- lhs::optimumLHS(n,d)*10
+init_y <- as.matrix(apply(init_X,1,fun))
+train_x <- data.frame(x=init_X)
+train_y <- init_y
+
+bestloc <- which.min(train_y)
+
 #迭帶次數
 nIter <- 10
 results <- vector("list",nIter)
